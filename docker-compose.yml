@@ -1,0 +1,72 @@
+version: '3.8' # Versi docker-compose
+
+services:
+  # Container Aplikasi Laravel (PHP)
+  app:
+    build:
+      context: . # Build dari Dockerfile di direktori saat ini
+      dockerfile: Dockerfile # Opsional, jika tidak ada Dockerfile, gunakan 'image'
+    # Jika tidak pakai Dockerfile, bisa pakai image dasar PHP:
+    # image: php:8.1-fpm # Ganti versi PHP sesuai kebutuhan (8.1)
+    container_name: inventory_app_laravel
+    restart: unless-stopped
+    working_dir: /var/www/html # Set working directory di dalam container
+    volumes:
+      - ./:/var/www/html # Mount kode lokal ke dalam container
+    depends_on:
+      - db # Pastikan DB siap sebelum App start
+    environment:
+      # Ambil dari .env file atau definisikan di sini
+      # Penting: DB_HOST harus nama service db di docker-compose (yaitu 'db')
+      DB_CONNECTION: pgsql 
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: uts3 # Sesuaikan dengan nama database di .env
+      DB_USERNAME: postgres
+      DB_PASSWORD: 
+      APP_KEY: ${APP_KEY} # Pastikan APP_KEY sudah di-generate di .env
+      # Tambahkan environment variable lain jika perlu
+    networks:
+      - inventory-network # Hubungkan ke network internal
+
+  # Container Web Server (Nginx) - Opsional tapi Umum Digunakan
+  # Jika menggunakan 'php artisan serve', Nginx tidak wajib
+  nginx:
+    image: nginx:alpine
+    container_name: inventory_app_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80" # Map port host 8080 ke port 80 container Nginx
+    volumes:
+      - ./:/var/www/html # Share kode aplikasi
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf # Konfigurasi Nginx
+    depends_on:
+      - app # Nginx butuh service 'app' (PHP-FPM)
+    networks:
+      - inventory-network
+
+  # Container Database (PostgreSQL)
+  db:
+    image: postgres:17.4-alpine # Ganti versi PostgreSQL sesuai kebutuhan (17.4)
+    container_name: inventory_app_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: uts3 # Sesuaikan dengan nama database di .env
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 
+    volumes:
+      - db_data:/var/lib/postgresql/data # Volume untuk persistensi data DB
+    ports:
+      - "5433:5432" # Map port host 5433 ke port 5432 container DB (hindari konflik jika ada postgres lokal)
+    networks:
+      - inventory-network
+
+# Definisi Network Internal
+networks:
+  inventory-network:
+    driver: bridge
+
+# Definisi Volume untuk Data DB
+volumes:
+  db_data:
+    driver: local
